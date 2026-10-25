@@ -953,9 +953,21 @@ extension Termiod {
     /// the daemon behind it is the machine the link names. A link copied from
     /// one Mac and edited to point at another would otherwise pair the second
     /// under the first one's identity.
-    static func probePairedDevice(_ paired: PairedDevice) throws -> TermiodDevice {
+    static func probePairedDevice(
+        _ paired: PairedDevice, cancellation: PairingCancellation? = nil
+    ) throws -> TermiodDevice {
         let transport = try Transport.paired(paired, requiresPairing: false)
-        defer { transport.close() }
+        // A splice that still answers pings in front of a daemon that does not
+        // answer would hold this read forever, so it has a deadline.
+        var deadline = timeval(tv_sec: Int(WebSocketBridge.openTimeout), tv_usec: 0)
+        _ = setsockopt(transport.readDescriptor, SOL_SOCKET, SO_RCVTIMEO, &deadline,
+                       socklen_t(MemoryLayout<timeval>.size))
+        cancellation?.watch(transport.readDescriptor)
+        defer {
+            cancellation?.unwatch()
+            transport.close()
+        }
+        guard cancellation?.isCancelled != true else { throw TermiodClientError.connectionClosed }
         let device = try performHello(transport, role: "control").device
         guard device.id == paired.hostID else {
             throw TermiodClientError.handshakeRejected(localized(

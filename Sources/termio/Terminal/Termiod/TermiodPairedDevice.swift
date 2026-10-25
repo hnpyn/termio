@@ -90,8 +90,11 @@ enum PairedDeviceStore {
     /// step, or a save finishing after an unpair would bring the record back.
     private static func loadedLocked() -> [String: PairedDevice] {
         if let cache { return cache }
-        let loaded = Dictionary(readAll().map { ($0.hostID, $0) }) { first, _ in first }
-        cache = loaded
+        let (devices, complete) = readAll()
+        let loaded = Dictionary(devices.map { ($0.hostID, $0) }) { first, _ in first }
+        // A locked keychain or a declined prompt is not "nothing is paired".
+        // Only a full read is kept, so the next call asks again.
+        if complete { cache = loaded }
         return loaded
     }
 
@@ -125,11 +128,17 @@ enum PairedDeviceStore {
         cached()[hostID]
     }
 
+    private enum Read {
+        case found(PairedDevice)
+        case missing
+        case failed
+    }
+
     static func all() -> [PairedDevice] {
         cached().values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private static func read(hostID: String) -> PairedDevice? {
+    private static func read(hostID: String) -> Read {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -139,23 +148,23 @@ enum PairedDeviceStore {
         ]
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return .missing }
         guard status == errSecSuccess, let data = result as? Data else {
-            if status != errSecItemNotFound {
-                Log.termiod.error("paired device \(hostID, privacy: .public) unreadable: \(status, privacy: .public)")
-            }
-            return nil
+            Log.termiod.error("paired device \(hostID, privacy: .public) unreadable: \(status, privacy: .public)")
+            return .failed
         }
         do {
-            return try JSONDecoder().decode(PairedDevice.self, from: data)
+            return .found(try JSONDecoder().decode(PairedDevice.self, from: data))
         } catch {
+            // A record this build cannot decode will not decode on retry either.
             Log.termiod.error("paired device \(hostID, privacy: .public) undecodable: \(error.localizedDescription, privacy: .public)")
-            return nil
+            return .missing
         }
     }
 
     /// Every paired Mac. Reads each record's data, which for an item this app
     /// wrote does not prompt.
-    private static func readAll() -> [PairedDevice] {
+    private static func readAll() -> (devices: [PairedDevice], complete: Bool) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -164,15 +173,21 @@ enum PairedDeviceStore {
         ]
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return ([], true) }
         guard status == errSecSuccess, let items = result as? [[String: Any]] else {
-            if status != errSecItemNotFound {
-                Log.termiod.error("paired devices unreadable: \(status, privacy: .public)")
-            }
-            return []
+            Log.termiod.error("paired devices unreadable: \(status, privacy: .public)")
+            return ([], false)
         }
-        return items
-            .compactMap { $0[kSecAttrAccount as String] as? String }
-            .compactMap(read(hostID:))
+        var devices: [PairedDevice] = []
+        var complete = true
+        for hostID in items.compactMap({ $0[kSecAttrAccount as String] as? String }) {
+            switch read(hostID: hostID) {
+            case .found(let device): devices.append(device)
+            case .missing: break
+            case .failed: complete = false
+            }
+        }
+        return (devices, complete)
     }
 
     /// What to call the machine a host key names: a paired Mac's name, else the
@@ -506,5 +521,35 @@ final class WebSocketBridge: @unchecked Sendable {
         private var stored: NWError?
         var error: NWError? { lock.withLock { stored } }
         func set(_ error: NWError?) { lock.withLock { stored = error } }
+    }
+}
+
+/// Cancel for the pairing sheet's dial. Shutting the socket down ends a read
+/// that is waiting on the far daemon. The descriptor is held under the lock and
+/// released before it is closed, so a late Cancel never reaches a descriptor
+/// the system has since handed to something else.
+final class PairingCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var descriptor: Int32?
+    private var cancelled = false
+
+    var isCancelled: Bool { lock.withLock { cancelled } }
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+            if let descriptor { shutdown(descriptor, SHUT_RDWR) }
+        }
+    }
+
+    func watch(_ descriptor: Int32) {
+        lock.withLock {
+            self.descriptor = descriptor
+            if cancelled { shutdown(descriptor, SHUT_RDWR) }
+        }
+    }
+
+    func unwatch() {
+        lock.withLock { descriptor = nil }
     }
 }

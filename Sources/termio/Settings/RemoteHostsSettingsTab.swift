@@ -268,11 +268,6 @@ private struct RemoteHostListRow: View {
 }
 
 
-@MainActor
-private final class PairingAttempt {
-    var isCancelled = false
-}
-
 /// Pairs this Mac with another one from the link its Pairing sheet copies. The
 /// link is checked by dialing it before anything is kept, so a typo or a Mac that
 /// is not serving fails here, in words, rather than on the first session.
@@ -283,7 +278,7 @@ struct PairMacSheet: View {
     @State private var failure: String?
     /// Set by Cancel, so a dial still running when the sheet closes keeps
     /// nothing. The task outlives the sheet; this box is what it can still read.
-    @State private var attempt = PairingAttempt()
+    @State private var attempt = PairingCancellation()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -316,7 +311,7 @@ struct PairMacSheet: View {
                 }
                 Spacer()
                 Button(localized("Cancel")) {
-                    attempt.isCancelled = true
+                    attempt.cancel()
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
@@ -342,7 +337,7 @@ struct PairMacSheet: View {
             // replaces one that does.
             let dialFailure: String? = await Task.detached(priority: .userInitiated) {
                 do {
-                    _ = try Termiod.probePairedDevice(device)
+                    _ = try Termiod.probePairedDevice(device, cancellation: attempt)
                     return nil
                 } catch {
                     return error.localizedDescription
