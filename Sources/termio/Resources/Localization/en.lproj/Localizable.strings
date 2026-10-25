@@ -476,6 +476,8 @@
 	<string>Couldn’t reach %@: %@.</string>
 	<key>Couldn’t remove %@.</key>
 	<string>Couldn’t remove %@.</string>
+	<key>Couldn’t remove the pairing from the keychain. Open Keychain Access, unlock the login keychain, and try again.</key>
+	<string>Couldn’t remove the pairing from the keychain. Open Keychain Access, unlock the login keychain, and try again.</string>
 	<key>Couldn’t remove worktree</key>
 	<string>Couldn’t remove worktree</string>
 	<key>Couldn’t save the pairing to the keychain: %@</key>

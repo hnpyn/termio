@@ -476,6 +476,8 @@
 	<string>无法连接 %1$@：%2$@。</string>
 	<key>Couldn’t remove %@.</key>
 	<string>无法移除 %@。</string>
+	<key>Couldn’t remove the pairing from the keychain. Open Keychain Access, unlock the login keychain, and try again.</key>
+	<string>无法从钥匙串中移除配对。请打开“钥匙串访问”，解锁登录钥匙串后重试。</string>
 	<key>Couldn’t remove worktree</key>
 	<string>无法移除 worktree</string>
 	<key>Couldn’t save the pairing to the keychain: %@</key>

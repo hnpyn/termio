@@ -99,6 +99,17 @@
         }
       }
     },
+    "Couldn’t remove the pairing from the keychain. Open Keychain Access, unlock the login keychain, and try again.": {
+      "comment": "Shown in a paired Mac's pane when Unpair could not delete the keychain item.",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法从钥匙串中移除配对。请打开“钥匙串访问”，解锁登录钥匙串后重试。"
+          }
+        }
+      }
+    },
     "Couldn’t save the pairing to the keychain: %@": {
       "comment": "Error when storing a paired Mac; %@ is the system's reason.",
       "localizations": {

@@ -34,6 +34,7 @@ struct DevicePane: View {
     private enum ProbeState { case idle, running, result(SSHProbeResult) }
     @State private var probe: ProbeState = .idle
     @State private var confirmUnpair = false
+    @State private var unpairFailed = false
 
     init(
         machine: KnownDevice,
@@ -290,7 +291,10 @@ struct DevicePane: View {
                         titleVisibility: .visible
                     ) {
                         Button(localized("Unpair"), role: .destructive) {
-                            PairedDeviceStore.remove(hostID: hostID)
+                            // Announced only once the keychain has let go: links
+                            // would otherwise redial with the record still there.
+                            unpairFailed = !PairedDeviceStore.remove(hostID: hostID)
+                            guard !unpairFailed else { return }
                             NotificationCenter.default.post(
                                 name: PairedDeviceStore.didChange, object: nil,
                                 userInfo: [PairedDeviceStore.unpairedHostIDKey: hostID])
@@ -304,6 +308,11 @@ struct DevicePane: View {
                     title: PairedDeviceStore.device(hostID: hostID)?.url ?? machine.name,
                     subtext: localized("Paired over the network. Its Termio must be open with Allow Paired Devices and Direct Attach on.")
                 )
+            }
+            if unpairFailed {
+                Text(localized("Couldn’t remove the pairing from the keychain. Open Keychain Access, unlock the login keychain, and try again."))
+                    .font(.settingsDetail)
+                    .foregroundStyle(.red)
             }
         } header: {
             SectionHeaderLabel(title: localized("Reached by"))
