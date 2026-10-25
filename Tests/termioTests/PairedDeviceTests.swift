@@ -30,6 +30,12 @@ final class PairedDeviceTests: XCTestCase {
         XCTAssertEqual(device.websocketURL?.absoluteString, "ws://[fd7a:115c:a1e0::7]:8795/ws")
     }
 
+    func testAnInternationalHostKeepsItsPunycodeInTheOrigin() throws {
+        let device = try XCTUnwrap(PairedDevice(
+            link: "termio://device?url=https://xn--bcher-kva.example&token=t&host_id=h"))
+        XCTAssertEqual(device.origin, "https://xn--bcher-kva.example")
+    }
+
     func testALinkMissingWhatTheDialNeedsIsRefused() {
         XCTAssertNil(PairedDevice(link: "termio://device?url=http://h:1&host_id=h"))
         XCTAssertNil(PairedDevice(link: "termio://device?token=t&host_id=h"))

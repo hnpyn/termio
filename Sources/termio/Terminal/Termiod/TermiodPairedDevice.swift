@@ -39,8 +39,10 @@ struct PairedDevice: Codable, Hashable, Identifiable {
     /// it, the browser CSRF defence, and a native client sends none on its own.
     /// The token stays what authenticates the pipe.
     var origin: String? {
+        // `encodedHost`: the wire form, punycode and IPv6 brackets kept, which is
+        // what a listener's pinned origin is written in.
         guard let base = URLComponents(string: url),
-              let scheme = base.scheme?.lowercased(), let host = base.host else { return nil }
+              let scheme = base.scheme?.lowercased(), let host = base.encodedHost else { return nil }
         let webScheme = scheme == "wss" ? "https" : (scheme == "ws" ? "http" : scheme)
         let port = base.port.map { ":\($0)" } ?? ""
         return "\(webScheme)://\(host)\(port)"
@@ -350,9 +352,9 @@ final class WebSocketBridge: @unchecked Sendable {
         // both are stated here, from the same URL.
         var headers: [(name: String, value: String)] = []
         if let origin { headers.append(("Origin", origin)) }
-        // `URLComponents` keeps an IPv6 literal's brackets; `URL.host` drops them,
-        // and `::1:8795` would read as a host named `:` on port 1.
-        if let host = URLComponents(url: url, resolvingAgainstBaseURL: false)?.host {
+        // The wire form, as for `Origin`: `URL.host` drops an IPv6 literal's
+        // brackets, and `::1:8795` would read as a host named `:` on port 1.
+        if let host = URLComponents(url: url, resolvingAgainstBaseURL: false)?.encodedHost {
             headers.append(("Host", url.port.map { "\(host):\($0)" } ?? host))
         }
         websocket.setAdditionalHeaders(headers)
