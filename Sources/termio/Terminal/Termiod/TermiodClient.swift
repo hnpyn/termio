@@ -895,6 +895,12 @@ extension Termiod {
                              caps: [String] = []) throws -> Handshake {
         let hello = try helloPayload(role: role, caps: caps, client: clientBanner)
         try writeFrame(transport.writeDescriptor, kind: .control, payload: hello)
+        // On a paired Mac the far app's splice answers pings for a daemon that
+        // may not be answering at all, so the reply gets a deadline there. It is
+        // lifted once the reply lands: the reads after it wait on a quiet shell.
+        let deadline = transport.route.isPaired
+        if deadline { setReceiveTimeout(transport.readDescriptor, seconds: WebSocketBridge.openTimeout) }
+        defer { if deadline { setReceiveTimeout(transport.readDescriptor, seconds: 0) } }
         let reply = try readFrame(transport.readDescriptor)
         guard reply.kind == .control else { throw TermiodClientError.malformedFrame }
         switch try decodeControl(reply.payload) {
@@ -957,11 +963,6 @@ extension Termiod {
         _ paired: PairedDevice, cancellation: PairingCancellation? = nil
     ) throws -> TermiodDevice {
         let transport = try Transport.paired(paired, requiresPairing: false)
-        // A splice that still answers pings in front of a daemon that does not
-        // answer would hold this read forever, so it has a deadline.
-        var deadline = timeval(tv_sec: Int(WebSocketBridge.openTimeout), tv_usec: 0)
-        _ = setsockopt(transport.readDescriptor, SOL_SOCKET, SO_RCVTIMEO, &deadline,
-                       socklen_t(MemoryLayout<timeval>.size))
         cancellation?.watch(transport.readDescriptor)
         defer {
             cancellation?.unwatch()
@@ -974,6 +975,13 @@ extension Termiod {
                 "The Mac at that address isn’t the one the link was copied from. Copy the link again."))
         }
         return device
+    }
+
+    /// `0` clears it. A socket option, so a no-op on the ssh road's pipes.
+    private static func setReceiveTimeout(_ descriptor: Int32, seconds: TimeInterval) {
+        var value = timeval(tv_sec: Int(seconds), tv_usec: 0)
+        _ = setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &value,
+                       socklen_t(MemoryLayout<timeval>.size))
     }
 
     /// Connect, shake hands, hang up: the cheapest question you can ask a route,
