@@ -52,7 +52,7 @@ struct RemoteHostsSettingsTab: View {
             // sections in between — and so read as adding a public key.
             Section {
                 ForEach(machines) { machine in
-                    NavigationLink(value: DeviceRoute(key: machine.settingsKey)) {
+                    NavigationLink(value: DeviceRoute(key: machine.navigationKey)) {
                         RemoteHostListRow(machine: machine, host: host(for: machine))
                     }
                 }
@@ -120,7 +120,8 @@ struct RemoteHostsSettingsTab: View {
         }
         .formStyle(.grouped)
         .navigationDestination(for: DeviceRoute.self) { route in
-            if let machine = machines.first(where: { $0.settingsKey == route.key }) {
+            if let machine = machines.first(where: { $0.navigationKey == route.key })
+                ?? machines.first(where: { $0.settingsKey == route.key }) {
                 DevicePane(
                     machine: machine,
                     host: host(for: machine),

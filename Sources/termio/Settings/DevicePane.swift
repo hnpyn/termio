@@ -291,7 +291,9 @@ struct DevicePane: View {
                     ) {
                         Button(localized("Unpair"), role: .destructive) {
                             PairedDeviceStore.remove(hostID: hostID)
-                            NotificationCenter.default.post(name: PairedDeviceStore.didChange, object: nil)
+                            NotificationCenter.default.post(
+                                name: PairedDeviceStore.didChange, object: nil,
+                                userInfo: [PairedDeviceStore.unpairedHostIDKey: hostID])
                         }
                         Button(localized("Cancel"), role: .cancel) {}
                     } message: {

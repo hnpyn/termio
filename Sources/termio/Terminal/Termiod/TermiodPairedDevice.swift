@@ -72,6 +72,8 @@ enum PairedDeviceStore {
 
     /// Posted after a Mac is paired or unpaired, on the main queue.
     static let didChange = Notification.Name("sh.termio.pairedDevicesDidChange")
+    /// In `didChange`'s user info when the change was an unpair.
+    static let unpairedHostIDKey = "unpairedHostID"
 
     /// The keychain read once per launch and kept in step by every write here:
     /// device names are drawn in menus and sidebar rows, which must not each

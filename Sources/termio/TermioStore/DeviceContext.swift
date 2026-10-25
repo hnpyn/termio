@@ -35,6 +35,11 @@ struct KnownDevice: Identifiable, Hashable {
     var id: String { alias ?? "" }
 
     var route: TermiodRoute { TermiodRoute(hostKey: alias) }
+
+    /// Which row a Settings pane belongs to. Not `settingsKey`: one Mac reached
+    /// over SSH and paired as well is one device with two roads, and each road
+    /// has its own pane (a host block to edit, a pairing to remove).
+    var navigationKey: String { alias ?? "" }
 }
 
 /// The directory the inspector's panes read, and the machine it lives on.

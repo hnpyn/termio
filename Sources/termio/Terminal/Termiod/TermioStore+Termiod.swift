@@ -553,6 +553,19 @@ extension TermioStore {
         for link in termiodLinks.values { link.retryNow() }
     }
 
+    /// Unpair ends this Mac's hold on another one at once, not at the next
+    /// dial: every live attach to it is detached and every pooled channel hung
+    /// up. Detach, never kill — the sessions keep running on that Mac, and
+    /// pairing it again reattaches them.
+    func disconnectPaired(hostID: String) {
+        let key = TermiodRoute.paired(hostID).hostKey
+        for session in allSessions where session.termiodRemoteHost == key {
+            termiodLinks[session.id]?.detach()
+            termiodLinks[session.id] = nil
+        }
+        Termiod.ControlPool.closeAll(route: .paired(hostID))
+    }
+
     func applyTermiodExit(for id: Session.ID,
                           code: Int32,
                           runtimeMilliseconds: UInt64,

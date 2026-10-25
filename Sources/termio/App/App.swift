@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var settingsObserver: AnyCancellable?
     /// Starts/stops the companion server + tunnel as the Mobile Access toggle flips.
     private var mobileAccessObserver: AnyCancellable?
+    private var unpairObserver: AnyCancellable?
     private var attachModeObserver: AnyCancellable?
     // Drives in-app auto-update. Started only in release builds — a debug build has
     // no Developer-ID signature for Sparkle to validate the appcast's EdDSA against,
@@ -418,6 +419,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         // React to the Settings toggle. `dropFirst` skips the value already
         // handled by the launch branch above, so we never double-start.
+        // Unpair is decided in Settings, which holds no store; the live links it
+        // must end are here.
+        unpairObserver = NotificationCenter.default.publisher(for: PairedDeviceStore.didChange)
+            .compactMap { $0.userInfo?[PairedDeviceStore.unpairedHostIDKey] as? String }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hostID in self?.store.disconnectPaired(hostID: hostID) }
         mobileAccessObserver = MobileAccess.shared.$isEnabled
             .dropFirst()
             .removeDuplicates()
