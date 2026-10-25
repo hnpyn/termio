@@ -1,4 +1,5 @@
 import XCTest
+import TermioShared
 @testable import termio
 
 /// The link another Mac pastes, and the host key a paired Mac is filed under.
@@ -11,6 +12,7 @@ final class PairedDeviceTests: XCTestCase {
         XCTAssertEqual(device.token, "s3cret")
         XCTAssertEqual(device.name, "Studio")
         XCTAssertEqual(device.websocketURL?.absoluteString, "ws://100.74.228.124:8795/ws")
+        XCTAssertEqual(device.origin, "http://100.74.228.124:8795")
     }
 
     func testALinkWithoutANameIsNamedByItsHost() throws {
@@ -18,6 +20,7 @@ final class PairedDeviceTests: XCTestCase {
             link: "termio://device?url=https://mini.tail1.ts.net/termio&token=t&host_id=h"))
         XCTAssertEqual(device.name, "mini.tail1.ts.net")
         XCTAssertEqual(device.websocketURL?.absoluteString, "wss://mini.tail1.ts.net/termio/ws")
+        XCTAssertEqual(device.origin, "https://mini.tail1.ts.net")
     }
 
     func testALinkMissingWhatTheDialNeedsIsRefused() {
@@ -42,5 +45,42 @@ final class PairedDeviceTests: XCTestCase {
         let data = try JSONEncoder().encode([TermiodRoute.paired("h_abc")])
         XCTAssertEqual(String(decoding: data, as: UTF8.self), #"["paired:h_abc"]"#)
         XCTAssertEqual(try JSONDecoder().decode([TermiodRoute].self, from: data), [.paired("h_abc")])
+    }
+}
+
+/// Against a real `termiod` WebSocket listener, the one a Linux box serves:
+/// handshake, then a request answered over the bridge. Skipped unless
+/// `TERMIO_TEST_PAIR_LINK` holds a link from `termiod pair` on a running daemon,
+/// because a unit run must not start one.
+final class PairedDeviceLiveTests: XCTestCase {
+    func testABoxsOwnListenerAnswersThroughTheBridge() throws {
+        guard let raw = ProcessInfo.processInfo.environment["TERMIO_TEST_PAIR_LINK"] else {
+            throw XCTSkip("set TERMIO_TEST_PAIR_LINK to a `termiod pair` link to run")
+        }
+        let paired = try XCTUnwrap(PairedDevice(link: raw))
+
+        let device = try Termiod.probePairedDevice(paired)
+        XCTAssertEqual(device.id, paired.hostID)
+
+        let transport = try Termiod.Transport.paired(paired, requiresPairing: false)
+        defer { transport.close() }
+        _ = try Termiod.performHello(transport, role: "control")
+        try Termiod.writeFrame(transport.writeDescriptor, kind: .control, payload: Termiod.listPayload())
+        var answered = false
+        while !answered {
+            let frame = try Termiod.readFrame(transport.readDescriptor)
+            guard frame.kind == .control else { continue }
+            if case .sessions = try Termiod.decodeControl(frame.payload) { answered = true }
+        }
+        XCTAssertTrue(answered)
+    }
+
+    func testABoxRefusesAStaleToken() throws {
+        guard let raw = ProcessInfo.processInfo.environment["TERMIO_TEST_PAIR_LINK"] else {
+            throw XCTSkip("set TERMIO_TEST_PAIR_LINK to a `termiod pair` link to run")
+        }
+        let real = try XCTUnwrap(PairedDevice(link: raw))
+        let stale = PairedDevice(hostID: real.hostID, name: real.name, url: real.url, token: "revoked")
+        XCTAssertThrowsError(try Termiod.probePairedDevice(stale))
     }
 }

@@ -34,6 +34,18 @@ struct PairedDevice: Codable, Hashable, Identifiable {
         return dial.url
     }
 
+    /// `scheme://host[:port]` of the invite's base, as the web spells it. A box's
+    /// own listener (`wss.rs`) refuses a dial without an `Origin` that matches
+    /// it, the browser CSRF defence, and a native client sends none on its own.
+    /// The token stays what authenticates the pipe.
+    var origin: String? {
+        guard let base = URLComponents(string: url),
+              let scheme = base.scheme?.lowercased(), let host = base.host else { return nil }
+        let webScheme = scheme == "wss" ? "https" : (scheme == "ws" ? "http" : scheme)
+        let port = base.port.map { ":\($0)" } ?? ""
+        return "\(webScheme)://\(host)\(port)"
+    }
+
     /// The `termio://device?url=…&token=…&host_id=…` link a Pairing section
     /// shows, as pasted. nil for anything else, including a link missing a part
     /// the dial needs.
@@ -288,7 +300,8 @@ final class WebSocketBridge: @unchecked Sendable {
             throw TermiodClientError.daemonUnreachable(device.url)
         }
         let bridge = WebSocketBridge(
-            url: url, token: device.token, hostID: device.hostID, descriptors: pair)
+            url: url, token: device.token, origin: device.origin, hostID: device.hostID,
+            descriptors: pair)
         do {
             try bridge.waitUntilOpen(name: device.name)
         } catch {
@@ -317,7 +330,7 @@ final class WebSocketBridge: @unchecked Sendable {
         return bridge
     }
 
-    private init(url: URL, token: String, hostID: String, descriptors: [Int32]) {
+    private init(url: URL, token: String, origin: String?, hostID: String, descriptors: [Int32]) {
         self.hostID = hostID
         descriptor = descriptors[0]
         pumpDescriptor = descriptors[1]
@@ -332,6 +345,15 @@ final class WebSocketBridge: @unchecked Sendable {
         // The token rides the subprotocol, as the phone sends it: a query string
         // on the Upgrade line would leak it into any proxy's log.
         websocket.setSubprotocols(["termiod.\(token)"])
+        // Network.framework writes `Host` without the port, and a box's listener
+        // compares host and port against `Origin` when no origin is pinned. So
+        // both are stated here, from the same URL.
+        var headers: [(name: String, value: String)] = []
+        if let origin { headers.append(("Origin", origin)) }
+        if let host = url.host {
+            headers.append(("Host", url.port.map { "\(host):\($0)" } ?? host))
+        }
+        websocket.setAdditionalHeaders(headers)
         let parameters = url.scheme == "wss" ? NWParameters.tls : NWParameters.tcp
         parameters.defaultProtocolStack.applicationProtocols.insert(websocket, at: 0)
         connection = NWConnection(to: .url(url), using: parameters)
