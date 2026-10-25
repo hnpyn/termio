@@ -80,16 +80,29 @@ enum PairedDeviceStore {
     nonisolated(unsafe) private static var cache: [String: PairedDevice]?
 
     private static func cached() -> [String: PairedDevice] {
-        lock.withLock {
-            if let cache { return cache }
-            let loaded = Dictionary(readAll().map { ($0.hostID, $0) }) { first, _ in first }
-            cache = loaded
-            return loaded
-        }
+        lock.withLock { loadedLocked() }
+    }
+
+    /// The cache, read from the keychain the first time. Callers hold `lock`,
+    /// and so does every write: a keychain change and its cache update are one
+    /// step, or a save finishing after an unpair would bring the record back.
+    private static func loadedLocked() -> [String: PairedDevice] {
+        if let cache { return cache }
+        let loaded = Dictionary(readAll().map { ($0.hostID, $0) }) { first, _ in first }
+        cache = loaded
+        return loaded
     }
 
     static func save(_ device: PairedDevice) throws {
         let data = try JSONEncoder().encode(device)
+        try lock.withLock {
+            _ = loadedLocked()
+            try write(data, for: device)
+            cache?[device.hostID] = device
+        }
+    }
+
+    private static func write(_ data: Data, for device: PairedDevice) throws {
         let match: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -104,8 +117,6 @@ enum PairedDeviceStore {
             status = SecItemAdd(match.merging(update) { $1 } as CFDictionary, nil)
         }
         guard status == errSecSuccess else { throw PairedDeviceError.keychain(status) }
-        _ = cached()
-        lock.withLock { cache?[device.hostID] = device }
     }
 
     static func device(hostID: String) -> PairedDevice? {
@@ -178,13 +189,13 @@ enum PairedDeviceStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: hostID,
         ]
-        let status = SecItemDelete(query as CFDictionary)
-        let removed = status == errSecSuccess || status == errSecItemNotFound
-        if removed {
-            _ = cached()
-            lock.withLock { cache?[hostID] = nil }
+        return lock.withLock {
+            _ = loadedLocked()
+            let status = SecItemDelete(query as CFDictionary)
+            let removed = status == errSecSuccess || status == errSecItemNotFound
+            if removed { cache?[hostID] = nil }
+            return removed
         }
-        return removed
     }
 }
 
@@ -233,7 +244,15 @@ final class WebSocketBridge: @unchecked Sendable {
             throw TermiodClientError.daemonUnreachable(device.url)
         }
         let bridge = WebSocketBridge(url: url, token: device.token, descriptors: pair)
-        try bridge.waitUntilOpen(name: device.name)
+        do {
+            try bridge.waitUntilOpen(name: device.name)
+        } catch {
+            // No transport ever owned the outward end, so nobody else closes it,
+            // and a reconnect loop against a Mac that is asleep would leak one
+            // per attempt.
+            Darwin.close(bridge.descriptor)
+            throw error
+        }
         bridge.startPumping()
         return bridge
     }
@@ -241,6 +260,11 @@ final class WebSocketBridge: @unchecked Sendable {
     private init(url: URL, token: String, descriptors: [Int32]) {
         descriptor = descriptors[0]
         pumpDescriptor = descriptors[1]
+        // A write into an end the transport has closed returns EPIPE rather
+        // than raising SIGPIPE, whose default disposition ends the app.
+        var on: Int32 = 1
+        _ = setsockopt(pumpDescriptor, SOL_SOCKET, SO_NOSIGPIPE, &on,
+                       socklen_t(MemoryLayout<Int32>.size))
         let websocket = NWProtocolWebSocket.Options()
         websocket.autoReplyPing = true
         websocket.maximumMessageSize = Termiod.maximumFrameSize

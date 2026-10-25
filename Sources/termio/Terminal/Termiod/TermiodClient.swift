@@ -606,9 +606,15 @@ extension Termiod {
                 throw TermiodClientError.remoteFailed(localized(
                     "This Mac is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
             }
+            return try paired(device)
+        }
+
+        /// A paired Mac from its record directly, for the pairing sheet's dial
+        /// before anything is saved.
+        static func paired(_ device: PairedDevice) throws -> Transport {
             let bridge = try WebSocketBridge.open(device)
             return Transport(readDescriptor: bridge.descriptor, writeDescriptor: bridge.descriptor,
-                             route: .paired(hostID), sshPid: nil, bridge: bridge)
+                             route: .paired(device.hostID), sshPid: nil, bridge: bridge)
         }
 
         /// `ssh <host> termiod stdio`: the framed protocol rides the SSH pipe,
@@ -941,6 +947,21 @@ extension Termiod {
         } catch let error as TermiodClientError {
             throw transport.explained(error)
         }
+    }
+
+    /// The pairing sheet's check: dial a link that is not saved yet, and confirm
+    /// the daemon behind it is the machine the link names. A link copied from
+    /// one Mac and edited to point at another would otherwise pair the second
+    /// under the first one's identity.
+    static func probePairedDevice(_ paired: PairedDevice) throws -> TermiodDevice {
+        let transport = try Transport.paired(paired)
+        defer { transport.close() }
+        let device = try performHello(transport, role: "control").device
+        guard device.id == paired.hostID else {
+            throw TermiodClientError.handshakeRejected(localized(
+                "The Mac at that address isn’t the one the link was copied from. Copy the link again."))
+        }
+        return device
     }
 
     /// Connect, shake hands, hang up: the cheapest question you can ask a route,

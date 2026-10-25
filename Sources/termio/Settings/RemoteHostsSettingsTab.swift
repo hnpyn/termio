@@ -267,6 +267,11 @@ private struct RemoteHostListRow: View {
 }
 
 
+@MainActor
+private final class PairingAttempt {
+    var isCancelled = false
+}
+
 /// Pairs this Mac with another one from the link its Pairing sheet copies. The
 /// link is checked by dialing it before anything is kept, so a typo or a Mac that
 /// is not serving fails here, in words, rather than on the first session.
@@ -275,6 +280,9 @@ struct PairMacSheet: View {
     @State private var link = ""
     @State private var checking = false
     @State private var failure: String?
+    /// Set by Cancel, so a dial still running when the sheet closes keeps
+    /// nothing. The task outlives the sheet; this box is what it can still read.
+    @State private var attempt = PairingAttempt()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -306,8 +314,11 @@ struct PairMacSheet: View {
                     ProgressView().controlSize(.small)
                 }
                 Spacer()
-                Button(localized("Cancel")) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                Button(localized("Cancel")) {
+                    attempt.isCancelled = true
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
                 Button(localized("Pair"), action: pair)
                     .keyboardShortcut(.defaultAction)
                     .disabled(checking || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -324,28 +335,30 @@ struct PairMacSheet: View {
         }
         failure = nil
         checking = true
-        let previous = PairedDeviceStore.device(hostID: device.hostID)
+        let attempt = attempt
         Task {
-            let outcome: String? = await Task.detached(priority: .userInitiated) {
+            // Dialled before anything is kept, so a link that does not work never
+            // replaces one that does.
+            let dialFailure: String? = await Task.detached(priority: .userInitiated) {
                 do {
-                    // Saved before the dial because the transport reads the
-                    // address from the keychain, and taken back if it fails.
-                    try PairedDeviceStore.save(device)
-                    _ = try Termiod.probeDevice(route: .paired(device.hostID))
+                    _ = try Termiod.probePairedDevice(device)
                     return nil
                 } catch {
-                    if let previous { try? PairedDeviceStore.save(previous) } else {
-                        PairedDeviceStore.remove(hostID: device.hostID)
-                    }
                     return error.localizedDescription
                 }
             }.value
+            guard !attempt.isCancelled else { return }
             checking = false
-            if let outcome {
-                failure = outcome
-            } else {
+            if let dialFailure {
+                failure = dialFailure
+                return
+            }
+            do {
+                try PairedDeviceStore.save(device)
                 NotificationCenter.default.post(name: PairedDeviceStore.didChange, object: nil)
                 dismiss()
+            } catch {
+                failure = error.localizedDescription
             }
         }
     }
