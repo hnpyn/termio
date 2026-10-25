@@ -978,7 +978,7 @@ extension Termiod {
     }
 
     /// `0` clears it. A socket option, so a no-op on the ssh road's pipes.
-    private static func setReceiveTimeout(_ descriptor: Int32, seconds: TimeInterval) {
+    static func setReceiveTimeout(_ descriptor: Int32, seconds: TimeInterval) {
         var value = timeval(tv_sec: Int(seconds), tv_usec: 0)
         _ = setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &value,
                        socklen_t(MemoryLayout<timeval>.size))
@@ -1683,7 +1683,12 @@ final class TermiodSessionLink: @unchecked Sendable {
                 rendering: declaredRendering
             )
             try Termiod.writeFrame(channel.writeDescriptor, kind: .control, payload: payload)
+            // Bounded on a paired Mac for the reason the hello is: its app's
+            // splice keeps the link alive for a daemon that may have stopped.
+            let paired = channel.route.isPaired
+            if paired { Termiod.setReceiveTimeout(channel.readDescriptor, seconds: WebSocketBridge.openTimeout) }
             let reply = try Termiod.readFrame(channel.readDescriptor)
+            if paired { Termiod.setReceiveTimeout(channel.readDescriptor, seconds: 0) }
             guard reply.kind == .control else {
                 throw TermiodClientError.handshakeRejected("attach was not acknowledged")
             }
