@@ -16,14 +16,23 @@ enum DeviceRoster {
     /// matters on the launch after an upgrade — a state file can name a host the
     /// registry has not re-learned yet, and a device the user can see sessions on
     /// must not be missing from the switcher.
-    static func known(in store: TermioStore) -> [KnownDevice] {
+    static func known(
+        in store: TermioStore, paired: [PairedDevice] = PairedDeviceStore.all()
+    ) -> [KnownDevice] {
         var deviceIDByAlias: [String: String] = [:]
         for device in TermiodDeviceRegistry.shared.all {
-            for alias in device.routes.compactMap(\.sshAlias) {
+            for alias in device.routes.compactMap(\.hostKey) {
                 deviceIDByAlias[alias] = device.id
             }
         }
         var aliases = Set(deviceIDByAlias.keys)
+        // A paired Mac's route is never written to the registry file, so after
+        // a relaunch the keychain is what still knows it.
+        for paired in paired {
+            let key = TermiodRoute.paired(paired.hostID).hostKey ?? ""
+            aliases.insert(key)
+            deviceIDByAlias[key] = paired.hostID
+        }
         for project in store.projects {
             for session in project.sessions {
                 if let host = session.termiodRemoteHost { aliases.insert(host) }
@@ -54,7 +63,9 @@ enum DeviceRoster {
     /// legitimate target here even though it is not yet a device.
     static func cloneTargets(in store: TermioStore) -> [KnownDevice] {
         let known = known(in: store)
-        return known.filter { !$0.isLocal }
+        // A paired Mac is left out: cloning runs `git clone` over ssh, and a
+        // paired Mac is reached by no ssh at all.
+        return known.filter { !$0.isLocal && !TermiodRoute.isPaired(hostKey: $0.alias) }
             + unusedAliases(known: known).map { KnownDevice(alias: $0, deviceID: nil) }
     }
 }
@@ -82,7 +93,7 @@ extension KnownDevice {
     static func running(
         _ session: Session,
         resolvingAlias resolve: (String) -> String? = {
-            TermiodDeviceRegistry.shared.deviceID(for: TermiodRoute(sshAlias: $0))
+            TermiodDeviceRegistry.shared.deviceID(for: TermiodRoute(hostKey: $0))
         }
     ) -> KnownDevice? {
         guard let alias = session.termiodRemoteHost ?? session.sshHost else { return nil }

@@ -505,15 +505,19 @@ extension Termiod {
         /// without explanation. `nil` on the local socket, which has no child
         /// and no stderr to keep.
         private let stderrTail: StderrTail?
+        /// The WebSocket behind a paired Mac's descriptor, held so it lives as
+        /// long as the transport does.
+        private let bridge: WebSocketBridge?
 
         private init(readDescriptor: Int32, writeDescriptor: Int32,
                      route: TermiodRoute, sshPid: pid_t?,
-                     stderrTail: StderrTail? = nil) {
+                     stderrTail: StderrTail? = nil, bridge: WebSocketBridge? = nil) {
             self.readDescriptor = readDescriptor
             self.writeDescriptor = writeDescriptor
             self.route = route
             self.sshPid = sshPid
             self.stderrTail = stderrTail
+            self.bridge = bridge
             Transport.suppressSignalOnBrokenPipe(writeDescriptor)
         }
 
@@ -590,7 +594,21 @@ extension Termiod {
             switch route {
             case .local: return try local()
             case .ssh(let alias): return try ssh(host: alias)
+            case .paired(let hostID): return try paired(hostID: hostID)
             }
+        }
+
+        /// A paired Mac over its WebSocket, bridged to a descriptor so nothing
+        /// above this line learns a third kind of pipe. The bridge lives as long
+        /// as its descriptor: closing it ends the WebSocket.
+        static func paired(hostID: String) throws -> Transport {
+            guard let device = PairedDeviceStore.device(hostID: hostID) else {
+                throw TermiodClientError.remoteFailed(localized(
+                    "This Mac is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
+            }
+            let bridge = try WebSocketBridge.open(device)
+            return Transport(readDescriptor: bridge.descriptor, writeDescriptor: bridge.descriptor,
+                             route: .paired(hostID), sshPid: nil, bridge: bridge)
         }
 
         /// `ssh <host> termiod stdio`: the framed protocol rides the SSH pipe,

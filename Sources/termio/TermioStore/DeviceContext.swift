@@ -31,10 +31,10 @@ struct KnownDevice: Identifiable, Hashable {
     /// The switcher and every menu row name a device this way. This Mac has no
     /// alias to show, and the host never supplies a display name (device
     /// architecture §4), so the client picks one.
-    var name: String { alias ?? localized("This Mac") }
+    var name: String { alias.map(PairedDeviceStore.displayName(hostKey:)) ?? localized("This Mac") }
     var id: String { alias ?? "" }
 
-    var route: TermiodRoute { TermiodRoute(sshAlias: alias) }
+    var route: TermiodRoute { TermiodRoute(hostKey: alias) }
 }
 
 /// The directory the inspector's panes read, and the machine it lives on.
@@ -153,7 +153,7 @@ extension TermioStore {
         KnownDevice(
             alias: currentDeviceAlias,
             deviceID: TermiodDeviceRegistry.shared.deviceID(
-                for: TermiodRoute(sshAlias: currentDeviceAlias))
+                for: TermiodRoute(hostKey: currentDeviceAlias))
         )
     }
 

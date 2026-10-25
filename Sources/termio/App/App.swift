@@ -1017,7 +1017,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             initialTab: initialTab,
             onSSHConnect: { [weak self] host in
                 guard let self else { return }
-                self.store.addSSHSession(host: host)
+                // A paired Mac has no ssh to open a shell over; its Connect opens
+                // a durable session through its daemon instead.
+                if TermiodRoute.isPaired(hostKey: host) {
+                    self.store.addRemoteTerminal(host: host)
+                } else {
+                    self.store.addSSHSession(host: host)
+                }
                 // The new session is selected in the store; surface the main
                 // window over Settings so the connection is immediately visible.
                 self.window.makeKeyAndOrderFront(nil)
