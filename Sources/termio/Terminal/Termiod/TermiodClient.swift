@@ -611,8 +611,8 @@ extension Termiod {
 
         /// A paired Mac from its record directly, for the pairing sheet's dial
         /// before anything is saved.
-        static func paired(_ device: PairedDevice) throws -> Transport {
-            let bridge = try WebSocketBridge.open(device)
+        static func paired(_ device: PairedDevice, requiresPairing: Bool = true) throws -> Transport {
+            let bridge = try WebSocketBridge.open(device, requiresPairing: requiresPairing)
             return Transport(readDescriptor: bridge.descriptor, writeDescriptor: bridge.descriptor,
                              route: .paired(device.hostID), sshPid: nil, bridge: bridge)
         }
@@ -954,7 +954,7 @@ extension Termiod {
     /// one Mac and edited to point at another would otherwise pair the second
     /// under the first one's identity.
     static func probePairedDevice(_ paired: PairedDevice) throws -> TermiodDevice {
-        let transport = try Transport.paired(paired)
+        let transport = try Transport.paired(paired, requiresPairing: false)
         defer { transport.close() }
         let device = try performHello(transport, role: "control").device
         guard device.id == paired.hostID else {

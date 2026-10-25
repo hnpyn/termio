@@ -112,7 +112,7 @@ final class DeviceSpliceIntegrationTests: XCTestCase {
     func testPairedMacReachesTheDaemonThroughTheBridge() async throws {
         let device = PairedDevice(
             hostID: "h_test", name: "mini", url: "http://127.0.0.1:\(port)", token: token)
-        let bridge = try await Task.detached { try WebSocketBridge.open(device) }.value
+        let bridge = try await Task.detached { try WebSocketBridge.open(device, requiresPairing: false) }.value
         defer { close(bridge.descriptor) }
 
         // The client writes frames to a descriptor, as on every other route, and
@@ -147,7 +147,7 @@ final class DeviceSpliceIntegrationTests: XCTestCase {
         let device = PairedDevice(
             hostID: "h_test", name: "mini", url: "http://127.0.0.1:\(port)", token: "revoked")
         do {
-            let bridge = try await Task.detached { try WebSocketBridge.open(device) }.value
+            let bridge = try await Task.detached { try WebSocketBridge.open(device, requiresPairing: false) }.value
             close(bridge.descriptor)
             XCTFail("a bridge with the wrong token was opened")
         } catch {

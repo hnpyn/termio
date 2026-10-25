@@ -245,8 +245,26 @@ final class WebSocketBridge: @unchecked Sendable {
     /// tailnet, or not serving, and the caller is better told so.
     static let openTimeout: TimeInterval = 10
 
+    /// Every open bridge, by the paired Mac it reaches, so Unpair can end them
+    /// all at once: a pooled channel or an attach must not outlive the pairing.
+    private static let registryLock = NSLock()
+    nonisolated(unsafe) private static var openBridges: [String: [ObjectIdentifier: WebSocketBridge]] = [:]
+
+    /// Ends every bridge to `hostID`. Their transports read the close as a lost
+    /// connection and redial, which fails while the Mac is unpaired and succeeds
+    /// once it is paired again.
+    static func closeAll(hostID: String) {
+        let closing = registryLock.withLock { openBridges.removeValue(forKey: hostID) ?? [:] }
+        for bridge in closing.values { bridge.finish() }
+    }
+
+    private let hostID: String
+
     /// Opens the WebSocket and returns once it is up, or throws why not.
-    static func open(_ device: PairedDevice) throws -> WebSocketBridge {
+    ///
+    /// `requiresPairing` is false only for the pairing sheet's dial, which is
+    /// what decides whether there will be a pairing.
+    static func open(_ device: PairedDevice, requiresPairing: Bool = true) throws -> WebSocketBridge {
         guard let url = device.websocketURL else {
             throw TermiodClientError.daemonUnreachable(device.url)
         }
@@ -254,7 +272,8 @@ final class WebSocketBridge: @unchecked Sendable {
         guard socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0 else {
             throw TermiodClientError.daemonUnreachable(device.url)
         }
-        let bridge = WebSocketBridge(url: url, token: device.token, descriptors: pair)
+        let bridge = WebSocketBridge(
+            url: url, token: device.token, hostID: device.hostID, descriptors: pair)
         do {
             try bridge.waitUntilOpen(name: device.name)
         } catch {
@@ -264,11 +283,27 @@ final class WebSocketBridge: @unchecked Sendable {
             Darwin.close(bridge.descriptor)
             throw error
         }
+        // Checked and registered under one lock, so an Unpair that lands while
+        // this dial was opening either sees the bridge or makes this check fail.
+        let admitted = registryLock.withLock { () -> Bool in
+            if requiresPairing, PairedDeviceStore.device(hostID: device.hostID)?.token != device.token {
+                return false
+            }
+            openBridges[device.hostID, default: [:]][ObjectIdentifier(bridge)] = bridge
+            return true
+        }
+        guard admitted else {
+            bridge.finish()
+            Darwin.close(bridge.descriptor)
+            throw TermiodClientError.remoteFailed(localized(
+                "This Mac is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
+        }
         bridge.startPumping()
         return bridge
     }
 
-    private init(url: URL, token: String, descriptors: [Int32]) {
+    private init(url: URL, token: String, hostID: String, descriptors: [Int32]) {
+        self.hostID = hostID
         descriptor = descriptors[0]
         pumpDescriptor = descriptors[1]
         // A write into an end the transport has closed returns EPIPE rather
@@ -418,7 +453,10 @@ final class WebSocketBridge: @unchecked Sendable {
                 self.finish()
                 return
             }
-            if let data, !data.isEmpty, !self.writeAll(data) {
+            // Only binary messages carry the stream. The splice's text heartbeat
+            // and any ping arrive here too, and a byte of either in the frame
+            // stream would tear the next frame apart.
+            if metadata?.opcode == .binary, let data, !data.isEmpty, !self.writeAll(data) {
                 self.finish()
                 return
             }
@@ -453,6 +491,7 @@ final class WebSocketBridge: @unchecked Sendable {
             return !finished
         }
         guard first else { return }
+        Self.registryLock.withLock { _ = Self.openBridges[hostID]?.removeValue(forKey: ObjectIdentifier(self)) }
         connection.cancel()
         shutdown(pumpDescriptor, SHUT_RDWR)
         // Closed after the reader thread has had its EOF: closing a descriptor

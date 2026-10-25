@@ -554,15 +554,12 @@ extension TermioStore {
     }
 
     /// Unpair ends this Mac's hold on another one at once, not at the next
-    /// dial: every live attach to it is detached and every pooled channel hung
-    /// up. Detach, never kill — the sessions keep running on that Mac, and
-    /// pairing it again reattaches them.
+    /// dial. Every WebSocket to it closes, and pooled channels are dropped so
+    /// none is handed out dead. The links are left alone on purpose: each reads
+    /// a lost connection and redials, which fails while unpaired and reattaches
+    /// once the Mac is paired again. The sessions keep running over there.
     func disconnectPaired(hostID: String) {
-        let key = TermiodRoute.paired(hostID).hostKey
-        for session in allSessions where session.termiodRemoteHost == key {
-            termiodLinks[session.id]?.detach()
-            termiodLinks[session.id] = nil
-        }
+        WebSocketBridge.closeAll(hostID: hostID)
         Termiod.ControlPool.closeAll(route: .paired(hostID))
     }
 
