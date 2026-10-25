@@ -23,6 +23,13 @@ final class PairedDeviceTests: XCTestCase {
         XCTAssertEqual(device.origin, "https://mini.tail1.ts.net")
     }
 
+    func testAnIPv6LinkKeepsItsBracketsInTheOrigin() throws {
+        let device = try XCTUnwrap(PairedDevice(
+            link: "termio://device?url=http://[fd7a:115c:a1e0::7]:8795&token=t&host_id=h"))
+        XCTAssertEqual(device.origin, "http://[fd7a:115c:a1e0::7]:8795")
+        XCTAssertEqual(device.websocketURL?.absoluteString, "ws://[fd7a:115c:a1e0::7]:8795/ws")
+    }
+
     func testALinkMissingWhatTheDialNeedsIsRefused() {
         XCTAssertNil(PairedDevice(link: "termio://device?url=http://h:1&host_id=h"))
         XCTAssertNil(PairedDevice(link: "termio://device?token=t&host_id=h"))

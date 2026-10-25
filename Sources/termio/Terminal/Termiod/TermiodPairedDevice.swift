@@ -350,7 +350,9 @@ final class WebSocketBridge: @unchecked Sendable {
         // both are stated here, from the same URL.
         var headers: [(name: String, value: String)] = []
         if let origin { headers.append(("Origin", origin)) }
-        if let host = url.host {
+        // `URLComponents` keeps an IPv6 literal's brackets; `URL.host` drops them,
+        // and `::1:8795` would read as a host named `:` on port 1.
+        if let host = URLComponents(url: url, resolvingAgainstBaseURL: false)?.host {
             headers.append(("Host", url.port.map { "\(host):\($0)" } ?? host))
         }
         websocket.setAdditionalHeaders(headers)
