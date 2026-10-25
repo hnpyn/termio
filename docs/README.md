@@ -128,6 +128,7 @@ from the real front matter).
 | draft | design | [Superlogical research brief (Codex / competitive)](design/20260805-_research-superlogical-codex-brief.md) |
 | draft | design | [termiod — Agent-native session mux](design/20260730-termiod-session-mux.md) |
 | draft | design | [termiod Session Protocol](design/20260730-termiod-session-protocol.md) |
+| draft | design | [The client VT follows the stream](design/20261024-client-vt-follows-the-stream.md) |
 | draft | design | [远程访问与中转策略（tunelo / BYO-tunnel）](design/20260705-remote-access-relay-strategy.md) |
 | draft | essay | [How Claude Code Got the Mouse: Reverse-Engineering the Clickable Terminal](essays/how-claude-code-got-the-mouse.md) |
 | draft | rfc | [零前置远程访问：把 dev tunnels 的形状搬到 termio](design/20260827-remote-access-dev-tunnels-model.md) |
