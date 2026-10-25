@@ -229,6 +229,15 @@ final class WebSocketBridge: @unchecked Sendable {
     private let queue = DispatchQueue(label: "sh.termio.termiod.websocket")
     private let lock = NSLock()
     private var finished = false
+    /// When the far side last proved it is there. Touched only on `queue`.
+    private var lastPong = ProcessInfo.processInfo.systemUptime
+
+    /// A link that drops packets without closing reads as idle forever: the
+    /// attach reader stays blocked and nothing reconnects. So the client pings
+    /// and gives the link up when no pong comes back, the rule the phone's
+    /// link uses too. Monotonic, so a Mac that slept is not counted as silent.
+    static let pingInterval: TimeInterval = 15
+    static let silenceLimit: TimeInterval = 50
 
     /// A dial that has not opened in this long is a Mac that is asleep, off the
     /// tailnet, or not serving, and the caller is better told so.
@@ -327,6 +336,10 @@ final class WebSocketBridge: @unchecked Sendable {
     private func startPumping() {
         // WebSocket → descriptor, on the connection's queue.
         receiveNext()
+        queue.async { [self] in
+            lastPong = ProcessInfo.processInfo.systemUptime
+            schedulePing()
+        }
         // Descriptor → WebSocket, on a thread of its own: the read blocks, and a
         // blocked read on the connection's queue would stall the other direction.
         let thread = Thread { [self] in
@@ -366,6 +379,28 @@ final class WebSocketBridge: @unchecked Sendable {
         sent.wait()
         return outcome.error == nil
     }
+
+    private func schedulePing() {
+        queue.asyncAfter(deadline: .now() + Self.pingInterval) { [weak self] in
+            guard let self, !self.isFinished else { return }
+            if ProcessInfo.processInfo.systemUptime - self.lastPong > Self.silenceLimit {
+                Log.termiod.notice("paired Mac stopped answering pings; closing the link")
+                self.finish()
+                return
+            }
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
+            metadata.setPongHandler(self.queue) { [weak self] error in
+                guard error == nil else { return }
+                self?.lastPong = ProcessInfo.processInfo.systemUptime
+            }
+            let context = NWConnection.ContentContext(identifier: "ping", metadata: [metadata])
+            self.connection.send(content: Data(), contentContext: context, isComplete: true,
+                                 completion: .contentProcessed { _ in })
+            self.schedulePing()
+        }
+    }
+
+    private var isFinished: Bool { lock.withLock { finished } }
 
     private func receiveNext() {
         connection.receiveMessage { [weak self] data, context, _, error in

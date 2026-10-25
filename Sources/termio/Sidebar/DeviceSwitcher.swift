@@ -21,7 +21,10 @@ enum DeviceRoster {
     ) -> [KnownDevice] {
         var deviceIDByAlias: [String: String] = [:]
         for device in TermiodDeviceRegistry.shared.all {
-            for alias in device.routes.compactMap(\.hostKey) {
+            // Paired routes come from the keychain below, not from here: a
+            // handshake records one before a pairing is accepted, and a refused
+            // or cancelled pairing must not leave a machine in the menus.
+            for alias in device.routes.filter({ !$0.isPaired }).compactMap(\.hostKey) {
                 deviceIDByAlias[alias] = device.id
             }
         }
