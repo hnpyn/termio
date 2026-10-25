@@ -604,7 +604,7 @@ extension Termiod {
         static func paired(hostID: String) throws -> Transport {
             guard let device = PairedDeviceStore.device(hostID: hostID) else {
                 throw TermiodClientError.remoteFailed(localized(
-                    "This Mac is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
+                    "This device is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
             }
             return try paired(device)
         }
@@ -972,7 +972,7 @@ extension Termiod {
         let device = try performHello(transport, role: "control").device
         guard device.id == paired.hostID else {
             throw TermiodClientError.handshakeRejected(localized(
-                "The Mac at that address isn’t the one the link was copied from. Copy the link again."))
+                "The device at that address isn’t the one the link was copied from. Copy the link again."))
         }
         return device
     }

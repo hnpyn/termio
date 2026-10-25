@@ -301,12 +301,12 @@ struct DevicePane: View {
                         }
                         Button(localized("Cancel"), role: .cancel) {}
                     } message: {
-                        Text(localized("Its sessions keep running there. To reach it again, copy a new link from its Pairing sheet."))
+                        Text(localized("Its sessions keep running there. To reach it again, copy a new pairing link from it."))
                     }
             } label: {
                 SettingsLabel(
                     title: PairedDeviceStore.device(hostID: hostID)?.url ?? machine.name,
-                    subtext: localized("Paired over the network. Its Termio must be open with Allow Paired Devices and Direct Attach on.")
+                    subtext: localized("Paired over the network, without SSH. It has to keep accepting paired devices.")
                 )
             }
             if unpairFailed {

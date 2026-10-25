@@ -208,7 +208,7 @@ enum PairedDeviceStore {
     /// SSH alias itself, which is the name the user gave it.
     static func displayName(hostKey: String) -> String {
         if case .paired(let hostID) = TermiodRoute(hostKey: hostKey) {
-            return device(hostID: hostID)?.name ?? localized("Paired Mac")
+            return device(hostID: hostID)?.name ?? localized("Paired Device")
         }
         return hostKey
     }
@@ -326,7 +326,7 @@ final class WebSocketBridge: @unchecked Sendable {
             bridge.finish()
             Darwin.close(bridge.descriptor)
             throw TermiodClientError.remoteFailed(localized(
-                "This Mac is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
+                "This device is no longer paired. Pair it again from Settings ▸ Remote Hosts."))
         }
         bridge.startPumping()
         return bridge
@@ -397,7 +397,7 @@ final class WebSocketBridge: @unchecked Sendable {
             finish()
             if case .posix(.ECONNABORTED) = error {
                 throw TermiodClientError.remoteFailed(localized(
-                    "\(name) turned this Mac’s pairing down. Its token was rotated, or Direct Attach is off. Copy a new link from its Pairing sheet and pair again."))
+                    "\(name) turned this Mac’s pairing down. Its pairing token was rotated, or it no longer accepts paired devices. Copy a new pairing link from it and pair again."))
             }
             throw TermiodClientError.remoteFailed(
                 Self.diagnosis(name: name, error: error?.localizedDescription))
@@ -406,7 +406,7 @@ final class WebSocketBridge: @unchecked Sendable {
 
     /// Why a dial to a paired Mac failed, in the words that lead to the fix.
     private static func diagnosis(name: String, error: String?) -> String {
-        let check = localized("Check that Termio is open there with Allow Paired Devices and Direct Attach on, and that both Macs are on the same network or tailnet.")
+        let check = localized("Check that it accepts paired devices, and that both are on the same network or tailnet, or that its tunnel is up.")
         guard let error else { return localized("Couldn’t reach \(name).") + " " + check }
         return localized("Couldn’t reach \(name): \(error).") + " " + check
     }

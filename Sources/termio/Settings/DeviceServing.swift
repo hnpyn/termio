@@ -661,7 +661,7 @@ struct PairingSheet: View {
                 footnote(localized("To pair another Mac, turn on Direct Attach."))
                     .multilineTextAlignment(.center)
             } else if mobile.isEnabled {
-                footnote(localized("On another Mac, choose Remote Hosts ▸ ＋ ▸ Pair with a Mac…, then paste the link."))
+                footnote(localized("On another Mac, choose Remote Hosts ▸ ＋ ▸ Pair with a Device…, then paste the link."))
                     .multilineTextAlignment(.center)
             }
             HStack {

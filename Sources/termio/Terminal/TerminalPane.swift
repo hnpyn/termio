@@ -1734,7 +1734,8 @@ private struct PaneCardChrome: View {
     /// session on another machine, and the home-abbreviated folder here.
     private var location: String {
         let folder = store.titleFolder(for: session.id)
-        if let remote = session.termiodRemoteHost ?? session.sshHost {
+        if let key = session.termiodRemoteHost ?? session.sshHost {
+            let remote = PairedDeviceStore.displayName(hostKey: key)
             guard session.termiodRemoteHost != nil, let folder else { return remote }
             return "\(remote):\(folder)"
         }

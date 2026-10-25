@@ -61,7 +61,7 @@ struct RemoteHostsSettingsTab: View {
                     // ~/.ssh/config, or another Mac's pairing link with no SSH.
                     Menu {
                         Button(localized("Add SSH Host…")) { addingHost = true }
-                        Button(localized("Pair with a Mac…")) { pairingMac = true }
+                        Button(localized("Pair with a Device…")) { pairingMac = true }
                     } label: {
                         SettingsGutterGlyph(symbol: "plus")
                     }
@@ -290,9 +290,9 @@ struct PairMacSheet: View {
                         .font(.system(.body, design: .monospaced))
                         .disabled(checking)
                 } header: {
-                    SectionHeaderLabel(title: localized("Pair with a Mac"))
+                    SectionHeaderLabel(title: localized("Pair with a Device"))
                 } footer: {
-                    Text(localized("On the other Mac, open Settings ▸ Server ▸ Pairing ▸ Show QR Code… and click Copy Link, then paste it here."))
+                    Text(localized("On a Mac, open Settings ▸ Server ▸ Pairing ▸ Show QR Code… and click Copy Link. For a Linux box, click Copy Invite in its Pairing section. Then paste the link here."))
                         .font(.settingsDetail)
                         .foregroundStyle(.secondary)
                 }
@@ -326,7 +326,7 @@ struct PairMacSheet: View {
 
     private func pair() {
         guard let device = PairedDevice(link: link) else {
-            failure = localized("That isn’t a Termio pairing link. Copy it again from the other Mac.")
+            failure = localized("That isn’t a Termio pairing link. Copy it again from the other device.")
             return
         }
         failure = nil

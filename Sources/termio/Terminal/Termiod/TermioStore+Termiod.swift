@@ -511,7 +511,8 @@ extension TermioStore {
     func applyTermiodConnectionLost(for id: Session.ID, attempts: Int,
                                     surface: InMemoryTerminalSession?) {
         guard let session = session(id) else { return }
-        let place = session.termiodRemoteHost ?? localized("this Mac")
+        let place = session.termiodRemoteHost.map(PairedDeviceStore.displayName(hostKey:))
+            ?? localized("this Mac")
         // The row says which of the two it is, because they want different
         // things from the user: nothing at all, or a look at the box.
         runtime(for: id).connectionNotice = attempts <= Self.reconnectBurstAttempts
@@ -1864,7 +1865,7 @@ extension TermioStore {
         guard !TermiodRoute.isPaired(hostKey: host) else {
             let alert = NSAlert()
             alert.messageText = localized("Clone on \(PairedDeviceStore.displayName(hostKey: host)) itself")
-            alert.informativeText = localized("Termio reaches a paired Mac without SSH, so it can’t clone there for you. Clone the repository on that Mac, then open the folder from here.")
+            alert.informativeText = localized("Termio reaches a paired device without SSH, so it can’t clone there for you. Clone the repository on that device, then open the folder from here.")
             alert.runModal()
             return
         }

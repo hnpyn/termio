@@ -26,7 +26,8 @@ struct SessionInfoView: View {
     /// `workingDirectory`, shown as plain copyable text because none of the local
     /// file actions apply to it. `nil` for every local session.
     private var remoteLocation: String? {
-        guard let session, let alias = session.termiodRemoteHost ?? session.sshHost else { return nil }
+        guard let session, let key = session.termiodRemoteHost ?? session.sshHost else { return nil }
+        let alias = PairedDeviceStore.displayName(hostKey: key)
         guard let path = session.termiodRemoteCwd else { return alias }
         return "\(alias):\(path)"
     }

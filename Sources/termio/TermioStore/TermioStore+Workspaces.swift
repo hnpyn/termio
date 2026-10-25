@@ -689,7 +689,8 @@ extension TermioStore {
         // that fact is known for certain. Nobody asked for this workspace; a
         // session arrived on a machine with nowhere to be filed.
         let workspace = Workspace(
-            name: alias, deviceAlias: alias, deviceID: deviceID, isAutoCreated: true)
+            name: PairedDeviceStore.displayName(hostKey: alias), deviceAlias: alias,
+            deviceID: deviceID, isAutoCreated: true)
         workspaces.append(workspace)
         return workspace.id
     }
